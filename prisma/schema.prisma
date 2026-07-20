@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Wallet {
+  id          String        @id @default(uuid())
+  address     String
+  chain       String
+  label       String?
+  riskScore   Float?
+  smartScore  Float?
+  createdAt   DateTime      @default(now())
+  transactions Transaction[]
+  trades      Trade[]
+  score       WalletScore?
+
+  @@unique([address, chain])
+}
+
+model Token {
+  id          String        @id @default(uuid())
+  address     String
+  symbol      String
+  name        String
+  marketCap   Float?
+  liquidity   Float?
+  chain       String
+  transactions Transaction[]
+  trades      Trade[]
+
+  @@unique([address, chain])
+}
+
+model Transaction {
+  id        String   @id @default(uuid())
+  externalId String? @unique
+  walletId  String
+  tokenId   String
+  type      String // "BUY" or "SELL"
+  amount    Float
+  price     Float
+  timestamp DateTime
+  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  token     Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+}
+
+model Trade {
+  id          String   @id @default(uuid())
+  walletId    String
+  tokenId     String
+  entryPrice  Float
+  exitPrice   Float?
+  entryTime   DateTime
+  exitTime    DateTime?
+  profitLoss  Float?
+  roi         Float?
+  holdingTime Int? // in seconds
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  token       Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+}
+
+model WalletScore {
+  id                  String   @id @default(uuid())
+  walletId            String   @unique
+  profitabilityScore  Float
+  consistencyScore    Float
+  entryTimingScore    Float
+  riskScore           Float
+  tradeQualityScore   Float
+  copyabilityScore    Float
+  totalScore          Float
+  classification      String
+  updatedAt           DateTime @default(now())
+  wallet              Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
