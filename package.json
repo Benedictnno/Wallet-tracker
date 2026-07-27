@@ -4,19 +4,25 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@serwist/next": "^9.5.12",
+    "@solana/web3.js": "^1.98.4",
     "@tanstack/react-query": "^5.101.2",
+    "bip39": "^3.1.0",
+    "bs58": "^6.0.0",
     "clsx": "^2.1.1",
+    "ed25519-hd-key": "^2.0.0",
     "lucide-react": "^1.25.0",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.9.2",
+    "serwist": "^9.5.12",
     "tailwind-merge": "^3.6.0",
     "zustand": "^5.0.14"
   },

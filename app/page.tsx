@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import WalletForm from "@/components/WalletForm";
+import RunDiscoveryButton from "@/components/RunDiscoveryButton";
 import { prisma } from "@/lib/prisma";
 import {
   formatWalletAddress,
@@ -8,6 +9,7 @@ import {
   parseWalletInput,
   type WalletFormState,
 } from "@/lib/wallets";
+import { walletIngestionService } from "@/services/WalletIngestionService";
 
 async function addWalletAction(
   _prevState: WalletFormState,
@@ -21,8 +23,8 @@ async function addWalletAction(
     chain: formData.get("chain"),
   });
 
-  if (parsed.error) {
-    return { error: parsed.error };
+  if (parsed.error || !parsed.data) {
+    return { error: parsed.error || "Invalid input" };
   }
 
   const existingWallet = await prisma.wallet.findFirst({
@@ -36,12 +38,30 @@ async function addWalletAction(
     return { error: "That wallet is already being tracked on this chain." };
   }
 
-  await prisma.wallet.create({
+  const wallet = await prisma.wallet.create({
     data: parsed.data,
   });
 
+  let success = "Wallet added to the radar.";
+
+  if (wallet.chain === "Solana") {
+    const syncResult = await walletIngestionService.syncWalletActivity(wallet.id);
+
+    if (syncResult.status === "synced") {
+      success =
+        syncResult.importedTransactions > 0
+          ? `Wallet added and synced. Imported ${syncResult.importedTransactions} parsed transactions.`
+          : "Wallet added and synced, but no parsable transactions were imported yet.";
+    } else if (syncResult.status === "not_configured") {
+      success =
+        "Wallet added, but sync is disabled until HELIUS_API_KEY is configured.";
+    } else if (syncResult.status === "unsupported_chain") {
+      success = syncResult.message;
+    }
+  }
+
   revalidatePath("/");
-  return { success: "Wallet added to the radar." };
+  return { success };
 }
 
 export default async function Home() {
@@ -63,7 +83,7 @@ export default async function Home() {
   const rankedWallets = [...wallets].sort(
     (left, right) => (right.score?.totalScore ?? -1) - (left.score?.totalScore ?? -1)
   );
-  const scoredWallets = wallets.filter((wallet) => wallet.score);
+  const scoredWallets = wallets.filter((wallet) => wallet.score && !wallet.isSuspectedBot);
   const averageScore = scoredWallets.length
     ? scoredWallets.reduce((sum, wallet) => sum + (wallet.score?.totalScore ?? 0), 0) /
       scoredWallets.length
@@ -136,6 +156,7 @@ export default async function Home() {
                   Highest-ranked wallets based on the current scoring layer.
                 </p>
               </div>
+              <RunDiscoveryButton />
             </div>
 
             {rankedWallets.length === 0 ? (
@@ -151,8 +172,13 @@ export default async function Home() {
                     className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 transition hover:border-sky-300 hover:bg-sky-50"
                   >
                     <div>
-                      <p className="text-sm font-medium text-slate-900">
+                      <p className="text-sm font-medium text-slate-900 flex items-center gap-2">
                         #{index + 1} {wallet.label || formatWalletAddress(wallet.address)}
+                        {wallet.isSuspectedBot && (
+                          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">
+                            BOT
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-slate-500">
                         {wallet.chain} · {formatWalletAddress(wallet.address)}
@@ -217,8 +243,13 @@ export default async function Home() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-xl font-semibold text-slate-900">
+                    <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
                       {wallet.label || "Unnamed Wallet"}
+                      {wallet.isSuspectedBot && (
+                          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700">
+                            BOT
+                          </span>
+                      )}
                     </h3>
                     <p className="mt-1 text-sm text-slate-500">{wallet.chain}</p>
                   </div>

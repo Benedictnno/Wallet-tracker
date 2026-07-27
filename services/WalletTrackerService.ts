@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { WalletAnalyticsService } from "@/services/WalletAnalyticsService";
 import { WalletScoringEngine } from "@/services/WalletScoringEngine";
+import { botDetectionService } from "@/services/BotDetectionService";
+import { walletIntegrityService } from "@/services/WalletIntegrityService";
 
 const analyticsService = new WalletAnalyticsService();
 const scoringEngine = new WalletScoringEngine();
@@ -10,7 +12,12 @@ export class WalletTrackerService {
     const wallet = await prisma.wallet.findUnique({
       where: { id: walletId },
       include: {
-        trades: true,
+        transactions: true,
+        trades: {
+          include: {
+            token: { select: { symbol: true, isSpam: true } }
+          }
+        },
         score: true,
       },
     });
@@ -19,7 +26,10 @@ export class WalletTrackerService {
       return { status: "not_found" as const };
     }
 
-    const analytics = analyticsService.summarizeTrades(wallet.trades);
+    const botResult = botDetectionService.analyze(wallet.transactions, wallet.trades);
+    const integrityResult = walletIntegrityService.analyze(wallet.trades);
+
+    const analytics = analyticsService.summarizeTrades(wallet.trades, integrityResult.integrityPenalty);
 
     if (!analytics) {
       await prisma.$transaction([
@@ -28,6 +38,11 @@ export class WalletTrackerService {
           data: {
             smartScore: null,
             riskScore: null,
+            isSuspectedBot: botResult.isSuspectedBot,
+            botType: botResult.botType,
+            botConfidence: botResult.botConfidence,
+            integrityFlags: JSON.stringify(integrityResult.integrityFlags),
+            integrityPenalty: integrityResult.integrityPenalty,
           },
         }),
         prisma.walletScore.deleteMany({
@@ -42,6 +57,7 @@ export class WalletTrackerService {
     }
 
     const score = scoringEngine.calculateScore(analytics);
+    const { integrityPenalty, ...scoreData } = score;
 
     const [, walletScore] = await prisma.$transaction([
       prisma.wallet.update({
@@ -49,16 +65,21 @@ export class WalletTrackerService {
         data: {
           smartScore: score.totalScore,
           riskScore: score.riskScore,
+          isSuspectedBot: botResult.isSuspectedBot,
+          botType: botResult.botType,
+          botConfidence: botResult.botConfidence,
+          integrityFlags: JSON.stringify(integrityResult.integrityFlags),
+          integrityPenalty: integrityResult.integrityPenalty,
         },
       }),
       prisma.walletScore.upsert({
         where: { walletId: wallet.id },
         create: {
           walletId: wallet.id,
-          ...score,
+          ...scoreData,
         },
         update: {
-          ...score,
+          ...scoreData,
           updatedAt: new Date(),
         },
       }),

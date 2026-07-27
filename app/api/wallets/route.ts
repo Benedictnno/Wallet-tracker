@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const parsed = parseWalletInput(body);
 
-    if (parsed.error) {
-      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    if (parsed.error || !parsed.data) {
+      return NextResponse.json({ error: parsed.error || "Invalid input" }, { status: 400 });
     }
 
     const existingWallet = await prisma.wallet.findFirst({

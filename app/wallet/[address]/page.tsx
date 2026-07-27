@@ -10,23 +10,43 @@ import {
   PaperTradingService,
 } from "@/services/PaperTradingService";
 import { WalletPortfolioService } from "@/services/WalletPortfolioService";
+import CopyTradingControls from "@/components/CopyTradingControls";
+import CopiedTradesFeed from "@/components/CopiedTradesFeed";
 
 type WalletPageProps = {
   params: Promise<{ address: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function formatMetric(value?: number | null, suffix = "") {
+
+function formatMetric(
+  value?: number | null,
+  suffix = "",
+  maximumFractionDigits = 0
+) {
   if (value == null) {
     return "--";
   }
 
-  return `${Math.round(value)}${suffix}`;
+  const formatted = new Intl.NumberFormat("en-US", {
+    maximumFractionDigits,
+  }).format(value);
+
+  return `${formatted}${suffix}`;
 }
 
 function formatCurrency(value?: number | null) {
   if (value == null) {
     return "--";
+  }
+
+  if (value === 0) {
+    return "$0.00";
+  }
+
+  const absValue = Math.abs(value);
+  if (absValue < 0.01) {
+    return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
   }
 
   return new Intl.NumberFormat("en-US", {
@@ -47,6 +67,26 @@ function formatDateTime(value?: Date | null) {
     hour: "numeric",
     minute: "2-digit",
   }).format(value);
+}
+
+function formatDurationFromSeconds(value?: number | null) {
+  if (value == null) {
+    return "--";
+  }
+
+  if (value < 60) {
+    return `${value}s`;
+  }
+
+  if (value < 60 * 60) {
+    return `${Math.round(value / 60)}m`;
+  }
+
+  if (value < 24 * 60 * 60) {
+    return `${Math.round(value / (60 * 60))}h`;
+  }
+
+  return `${Math.round(value / (24 * 60 * 60))}d`;
 }
 
 function parseNumberParam(
@@ -126,6 +166,16 @@ export default async function WalletDetailPage({
           transactions: true,
           trades: true,
         },
+      },
+      copyTradeSettings: true,
+      executionRecords: {
+        include: {
+          token: true,
+        },
+        orderBy: {
+          timestamp: "desc",
+        },
+        take: 20,
       },
     },
   });
@@ -250,12 +300,27 @@ export default async function WalletDetailPage({
             <Link href="/" className="text-sm text-sky-700 hover:text-sky-800">
               Back to dashboard
             </Link>
-            <h1 className="mt-3 text-3xl font-bold text-slate-900">
+            <h1 className="mt-3 text-3xl font-bold text-slate-900 flex items-center gap-3">
               {wallet.label || "Wallet Profile"}
+              {wallet.isSuspectedBot && (
+                <span className="rounded-full bg-rose-100 px-3 py-1 text-sm font-bold text-rose-700">
+                  BOT DETECTED ({wallet.botType})
+                </span>
+              )}
             </h1>
             <p className="mt-2 break-all text-sm text-slate-600">
               {wallet.address}
             </p>
+            {(wallet.integrityFlags ? JSON.parse(wallet.integrityFlags as string) : []).length > 0 && (
+              <div className="mt-4 rounded-xl bg-orange-50 px-4 py-3 border border-orange-200">
+                <p className="text-sm font-semibold text-orange-800">⚠️ Integrity Warnings ({wallet.integrityPenalty} penalty)</p>
+                <ul className="mt-1 list-disc list-inside text-xs text-orange-700">
+                  {(wallet.integrityFlags ? JSON.parse(wallet.integrityFlags as string) : []).map((flag: string) => (
+                    <li key={flag}>{flag}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-end gap-3">
             <SyncWalletButton walletId={wallet.id} />
@@ -274,7 +339,14 @@ export default async function WalletDetailPage({
           </div>
         </div>
 
-        <section className="grid gap-4 md:grid-cols-4">
+        <CopyTradingControls 
+          walletId={wallet.id} 
+          initialSettings={wallet.copyTradeSettings} 
+        />
+
+        <CopiedTradesFeed records={wallet.executionRecords} />
+
+        <section className="grid gap-4 md:grid-cols-4 mt-6">
           <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
             <p className="text-xs uppercase tracking-wide text-slate-500">Chain</p>
             <p className="mt-3 text-xl font-semibold text-slate-900">
@@ -365,6 +437,8 @@ export default async function WalletDetailPage({
                   <thead>
                     <tr className="text-left text-slate-500">
                       <th className="pb-3 font-medium">Token</th>
+                      <th className="pb-3 font-medium">Source</th>
+                      <th className="pb-3 font-medium">Token Age</th>
                       <th className="pb-3 font-medium">Entry</th>
                       <th className="pb-3 font-medium">Exit</th>
                       <th className="pb-3 font-medium">ROI</th>
@@ -373,8 +447,19 @@ export default async function WalletDetailPage({
                   <tbody className="divide-y divide-slate-100">
                     {wallet.trades.map((trade) => (
                       <tr key={trade.id}>
-                        <td className="py-3 text-slate-900">
+                        <td className="py-3 text-slate-900 flex items-center gap-2">
                           {trade.token.symbol}
+                          {trade.token.isSpam && (
+                            <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">
+                              SPAM
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {trade.entrySource || "--"}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatDurationFromSeconds(trade.tokenAgeSecondsAtEntry)}
                         </td>
                         <td className="py-3 text-slate-600">
                           {formatCurrency(trade.entryPrice)}
@@ -405,44 +490,85 @@ export default async function WalletDetailPage({
                 Score Breakdown
               </h2>
               {wallet.score ? (
-                <div className="mt-5 space-y-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Profitability</span>
-                    <span className="font-medium text-slate-900">
-                      {formatMetric(wallet.score.profitabilityScore)}
-                    </span>
+                <>
+                  <div className="mt-5 space-y-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-600">Profitability</span>
+                      <span className="font-medium text-slate-900">
+                        {formatMetric(wallet.score.profitabilityScore)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-600">Consistency</span>
+                      <span className="font-medium text-slate-900">
+                        {formatMetric(wallet.score.consistencyScore)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-600">Entry Timing</span>
+                      <span className="font-medium text-slate-900">
+                        {formatMetric(wallet.score.entryTimingScore)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-600">Risk</span>
+                      <span className="font-medium text-slate-900">
+                        {formatMetric(wallet.score.riskScore)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-600">Trade Quality</span>
+                      <span className="font-medium text-slate-900">
+                        {formatMetric(wallet.score.tradeQualityScore)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-600">Copyability</span>
+                      <span className="font-medium text-slate-900">
+                        {formatMetric(wallet.score.copyabilityScore)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Consistency</span>
-                    <span className="font-medium text-slate-900">
-                      {formatMetric(wallet.score.consistencyScore)}
-                    </span>
+
+                  <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-slate-500">Win Rate</p>
+                      <p className="mt-1 font-medium text-slate-900">
+                        {formatMetric(wallet.score.winRate, "%")}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-slate-500">Total ROI</p>
+                      <p className="mt-1 font-medium text-slate-900">
+                        {formatMetric(wallet.score.totalROI, "%")}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-slate-500">Max Drawdown</p>
+                      <p className="mt-1 font-medium text-slate-900">
+                        {formatMetric(wallet.score.maxDrawdown, "%")}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-slate-500">Early Entries</p>
+                      <p className="mt-1 font-medium text-slate-900">
+                        {formatMetric(wallet.score.earlyEntryPercentage, "%")}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-slate-500">Avg Trades / Day</p>
+                      <p className="mt-1 font-medium text-slate-900">
+                        {formatMetric(wallet.score.averageTradesPerDay, "", 1)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-slate-500">Largest Position</p>
+                      <p className="mt-1 font-medium text-slate-900">
+                        {formatMetric(wallet.score.largestPositionPercentage, "%")}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Entry Timing</span>
-                    <span className="font-medium text-slate-900">
-                      {formatMetric(wallet.score.entryTimingScore)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Risk</span>
-                    <span className="font-medium text-slate-900">
-                      {formatMetric(wallet.score.riskScore)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Trade Quality</span>
-                    <span className="font-medium text-slate-900">
-                      {formatMetric(wallet.score.tradeQualityScore)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Copyability</span>
-                    <span className="font-medium text-slate-900">
-                      {formatMetric(wallet.score.copyabilityScore)}
-                    </span>
-                  </div>
-                </div>
+                </>
               ) : (
                 <p className="mt-4 text-sm text-slate-500">
                   No score has been computed yet for this wallet.

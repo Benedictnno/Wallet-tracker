@@ -80,20 +80,21 @@ export default function PaperTradingChart({
               width={64}
             />
             <Tooltip
-              formatter={(value: number, name: string) => {
+              formatter={(value: any, name: any) => {
+                const numVal = Number(value || 0);
                 if (name === "endingCapital") {
-                  return [formatCurrency(value), "Ending capital"];
+                  return [formatCurrency(numVal), "Ending capital"];
                 }
 
                 if (name === "profitLoss") {
-                  return [formatCurrency(value), "Profit / loss"];
+                  return [formatCurrency(numVal), "Profit / loss"];
                 }
 
                 if (name === "allocatedCapital") {
-                  return [formatCurrency(value), "Allocated"];
+                  return [formatCurrency(numVal), "Allocated"];
                 }
 
-                return [`${Math.round(value)}%`, "Trade ROI"];
+                return [`${Math.round(numVal)}%`, "Trade ROI"];
               }}
               labelFormatter={(_label, payload) => {
                 const point = payload?.[0]?.payload as PaperTradingChartPoint | undefined;
