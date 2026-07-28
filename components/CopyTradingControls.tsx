@@ -41,10 +41,16 @@ export default function CopyTradingControls({ walletId, initialSettings }: { wal
       if (res.ok) {
         if (data.heliusSync?.success) {
           setSyncStatus(`🟢 Synced with Helius (${data.heliusSync.action === 'created' ? 'Webhook Registered' : 'Address Synced'})`);
+          if (enabled && !initialSettings?.enabled) {
+            window.alert("✅ Copy trading is now ACTIVE for this wallet!\n\nThe bot is listening to Helius webhooks and will automatically mirror its trades based on your strategy settings.");
+          }
         } else if (data.heliusSync?.reason) {
           setSyncStatus(`⚠️ Saved, but Helius: ${data.heliusSync.reason}`);
         } else {
           setSyncStatus("🟢 Strategy settings saved!");
+          if (enabled && !initialSettings?.enabled) {
+            window.alert("✅ Copy trading is now ACTIVE for this wallet!\n\nThe bot will automatically mirror its trades based on your strategy settings.");
+          }
         }
       } else {
         setSyncStatus(`❌ Error: ${data.error || 'Failed to save'}`);

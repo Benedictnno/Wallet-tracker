@@ -2,6 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import WalletForm from "@/components/WalletForm";
 import RunDiscoveryButton from "@/components/RunDiscoveryButton";
+import WalletBalanceWidget from "@/components/WalletBalanceWidget";
 import { prisma } from "@/lib/prisma";
 import {
   formatWalletAddress,
@@ -100,7 +101,13 @@ export default async function Home() {
           <p className="text-sm uppercase tracking-[0.24em] text-sky-300">
             Smart Wallet Radar
           </p>
-          <div className="mt-1 flex justify-end">
+          <div className="mt-1 flex justify-end gap-3">
+            <Link
+              href="/history"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/20 transition"
+            >
+              📋 Trade History
+            </Link>
             <Link
               href="/settings"
               className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/20 transition"
@@ -152,8 +159,11 @@ export default async function Home() {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[1.2fr_2fr]">
-          <WalletForm action={addWalletAction} />
-
+          <div className="flex flex-col gap-6">
+            <WalletBalanceWidget />
+            <WalletForm action={addWalletAction} />
+          </div>
+          
           <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
             <div className="flex items-center justify-between">
               <div>

@@ -85,9 +85,14 @@ export default function SettingsPage() {
       <div className="mx-auto max-w-3xl flex flex-col gap-8">
         {/* Header */}
         <div>
-          <Link href="/" className="text-sm text-sky-700 hover:text-sky-800">
-            ← Back to dashboard
-          </Link>
+          <div className="flex gap-4">
+            <Link href="/" className="text-sm text-sky-700 hover:text-sky-800 flex items-center gap-1">
+              ← Back to dashboard
+            </Link>
+            <Link href="/history" className="text-sm text-sky-700 hover:text-sky-800 flex items-center gap-1">
+              Trade History →
+            </Link>
+          </div>
           <h1 className="mt-4 text-3xl font-bold text-slate-900">Global Settings</h1>
           <p className="mt-1 text-sm text-slate-500">
             Configure the trading bot, notifications, and risk limits.
