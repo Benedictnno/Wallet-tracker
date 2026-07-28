@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   title: "Wallet Tracker & Copy Trader",
   description: "An automated crypto wallet tracker and copy-trading bot for Solana.",
   manifest: "/manifest.webmanifest",
+  icons: {
+    apple: "/icon-192x192.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
