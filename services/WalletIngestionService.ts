@@ -356,17 +356,16 @@ export class WalletIngestionService {
         }
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.trade.deleteMany({
-        where: { walletId },
-      });
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.trade.deleteMany({ where: { walletId } });
 
-      for (const trade of tradesToCreate) {
-        await tx.trade.create({
-          data: trade,
-        });
-      }
-    });
+        if (tradesToCreate.length > 0) {
+          await tx.trade.createMany({ data: tradesToCreate });
+        }
+      },
+      { maxWait: 10_000, timeout: 60_000 } // 60s timeout for large wallets
+    );
   }
 
   private minDate(current: Date | null, candidate: Date) {

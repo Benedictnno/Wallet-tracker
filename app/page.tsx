@@ -100,6 +100,14 @@ export default async function Home() {
           <p className="text-sm uppercase tracking-[0.24em] text-sky-300">
             Smart Wallet Radar
           </p>
+          <div className="mt-1 flex justify-end">
+            <Link
+              href="/settings"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/20 transition"
+            >
+              ⚙️ Settings
+            </Link>
+          </div>
           <div className="mt-4 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
               <h1 className="text-4xl font-bold tracking-tight">

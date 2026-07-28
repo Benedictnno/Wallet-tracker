@@ -2,6 +2,7 @@ import { prisma } from "../../lib/prisma";
 import { HeliusEnhancedTransaction } from "../solana/HeliusWalletProvider";
 import { jupiterTradeService } from "./JupiterTradeService";
 import { tokenPriceService } from "../TokenPriceService";
+import { notificationService } from "../NotificationService";
 
 const NATIVE_SOL_MINT = "So11111111111111111111111111111111111111112";
 
@@ -188,6 +189,21 @@ export class CopyTradeService {
     });
 
     console.log(`[CopyTradeService] Recorded execution ID ${record.id} in DB.`);
+
+    // Fire-and-forget notification
+    notificationService.notifyTradeExecuted({
+      type: type as "BUY" | "SELL",
+      status: execStatus as "EXECUTED" | "SIMULATED" | "FAILED",
+      walletLabel: settings.wallet.label,
+      walletAddress: settings.wallet.address,
+      tokenSymbol: token.symbol,
+      tokenAddress: token.address,
+      amountSol: tradeAmountSol,
+      amountToken: calculatedAmountToken,
+      executionPrice: executionPriceSol || null,
+      errorReason: execError,
+      txId: execStatus === "EXECUTED" ? finalTradeId : null,
+    }).catch(err => console.error('[CopyTradeService] Notification error:', err));
   }
 }
 

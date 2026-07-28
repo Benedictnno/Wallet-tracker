@@ -41,3 +41,15 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# Temp/scratch files
+new_package_json.txt
+package.json.bak
+
+# SQLite databases
+*.db
+*.db-journal
+prisma/dev.db
+
+# Generated service worker
+/public/sw.js

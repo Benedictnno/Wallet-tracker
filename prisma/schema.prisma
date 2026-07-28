@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 model User {
@@ -177,4 +178,19 @@ model ExecutionRecord {
   timestamp         DateTime @default(now())
   wallet            Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
   token             Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+}
+
+// Global singleton settings stored in DB (avoids secrets in env for production)
+model GlobalSettings {
+  id                    String   @id @default("singleton")
+  // Notifications
+  telegramBotToken      String?
+  telegramChatId        String?
+  discordWebhookUrl     String?
+  // Live vs Paper trading master switch
+  liveTradeEnabled      Boolean  @default(false)
+  // Global risk limits
+  globalMaxOpenPositions Int     @default(5)
+  globalDailyLossSol    Float    @default(2.0)
+  updatedAt             DateTime @updatedAt
 }
