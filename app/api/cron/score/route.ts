@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { WalletScoringEngine } from "@/services/WalletScoringEngine";
+import { walletTrackerService } from "@/services/WalletTrackerService";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const scoringEngine = new WalletScoringEngine();
+
   const wallets = await prisma.wallet.findMany({
     select: { id: true, label: true },
   });
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   for (const wallet of wallets) {
     try {
-      await scoringEngine.scoreWallet(wallet.id);
+      await walletTrackerService.refreshWalletAnalysis(wallet.id);
       scored++;
     } catch (err) {
       console.error(`[Cron/Score] Failed to score wallet ${wallet.id}:`, err);
