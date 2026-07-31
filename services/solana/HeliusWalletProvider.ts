@@ -44,6 +44,15 @@ type HeliusSwapEvent = {
   }>;
 };
 
+export type CandidateTrader = {
+  address: string;
+  txHash: string;
+  timestamp: number;
+  swapValueSol: number;
+  swapValueUsd: number;
+  tokenAddress: string;
+};
+
 export type HeliusEnhancedTransaction = {
   signature?: string;
   description?: string;
@@ -83,6 +92,63 @@ export class HeliusWalletProvider {
   }
 
   /**
+   * Helper to estimate the swap value in SOL or USD/Stablecoins
+   */
+  getSwapValue(tx: HeliusEnhancedTransaction): { sol: number; usd: number } {
+    let sol = 0;
+    let usd = 0;
+
+    if (tx.events?.swap) {
+      const swap = tx.events.swap;
+      if (swap.nativeInput) {
+        sol = Math.max(sol, parseInt(swap.nativeInput.amount || "0") / 1e9);
+      }
+      if (swap.nativeOutput) {
+        sol = Math.max(sol, parseInt(swap.nativeOutput.amount || "0") / 1e9);
+      }
+
+      const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+      const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+      const tokenInputs = swap.tokenInputs || [];
+      const tokenOutputs = swap.tokenOutputs || [];
+
+      for (const input of [...tokenInputs, ...tokenOutputs]) {
+        if (input.mint === USDC || input.mint === USDT) {
+          const decimals = input.rawTokenAmount?.decimals ?? 6;
+          const rawAmount = parseFloat(input.rawTokenAmount?.tokenAmount || "0");
+          usd = Math.max(usd, rawAmount / Math.pow(10, decimals));
+        }
+      }
+    }
+
+    // Fallback: search native/token transfers involving the fee payer
+    if (sol === 0 && tx.nativeTransfers) {
+      for (const nt of tx.nativeTransfers) {
+        if ((nt.fromUserAccount === tx.feePayer || nt.toUserAccount === tx.feePayer) && nt.amount) {
+          const solValue = nt.amount / 1e9;
+          if (solValue > 0.05) {
+            sol = Math.max(sol, solValue);
+          }
+        }
+      }
+    }
+
+    if (usd === 0 && tx.tokenTransfers) {
+      const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+      const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+      for (const tt of tx.tokenTransfers) {
+        if ((tt.fromUserAccount === tx.feePayer || tt.toUserAccount === tx.feePayer) && tt.tokenAmount) {
+          if (tt.mint === USDC || tt.mint === USDT) {
+            usd = Math.max(usd, tt.tokenAmount);
+          }
+        }
+      }
+    }
+
+    return { sol, usd };
+  }
+
+  /**
    * Given a list of transactions (usually fetched for a token mint),
    * extract the unique wallet addresses that performed the trades.
    * By using feePayer, we perfectly filter out all AMM vaults, PDAs, and system programs.
@@ -94,8 +160,6 @@ export class HeliusWalletProvider {
       if (!tx.feePayer || !tx.tokenTransfers) continue;
 
       // Ensure the fee payer is actually the one sending/receiving tokens.
-      // This perfectly filters out AMM vaults (they don't pay fees) 
-      // AND relayers/gas-bots (they pay fees but don't receive the tokens).
       const isTrader = tx.tokenTransfers.some(
         (t) => t.toUserAccount === tx.feePayer || t.fromUserAccount === tx.feePayer
       );
@@ -106,6 +170,47 @@ export class HeliusWalletProvider {
     }
 
     return Array.from(wallets);
+  }
+
+  /**
+   * Detailed extraction of candidate traders including trade sizes and timestamps.
+   */
+  extractTradersFromTransactionsDetailed(
+    transactions: HeliusEnhancedTransaction[],
+    tokenAddress: string
+  ): CandidateTrader[] {
+    const candidatesMap = new Map<string, CandidateTrader>();
+
+    for (const tx of transactions) {
+      if (!tx.feePayer || !tx.tokenTransfers || !tx.timestamp) continue;
+
+      const isTrader = tx.tokenTransfers.some(
+        (t) => t.toUserAccount === tx.feePayer || t.fromUserAccount === tx.feePayer
+      );
+
+      if (isTrader) {
+        const { sol, usd } = this.getSwapValue(tx);
+        const existing = candidatesMap.get(tx.feePayer);
+        
+        if (existing) {
+          // Keep the largest swap value or oldest swap
+          existing.swapValueSol = Math.max(existing.swapValueSol, sol);
+          existing.swapValueUsd = Math.max(existing.swapValueUsd, usd);
+          existing.timestamp = Math.min(existing.timestamp, tx.timestamp);
+        } else {
+          candidatesMap.set(tx.feePayer, {
+            address: tx.feePayer,
+            txHash: tx.signature || "",
+            timestamp: tx.timestamp,
+            swapValueSol: sol,
+            swapValueUsd: usd,
+            tokenAddress,
+          });
+        }
+      }
+    }
+
+    return Array.from(candidatesMap.values());
   }
 
   /**

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import WalletForm from "@/components/WalletForm";
 import RunDiscoveryButton from "@/components/RunDiscoveryButton";
+import RefreshButton from "@/components/RefreshButton";
 import WalletBalanceWidget from "@/components/WalletBalanceWidget";
 import { prisma } from "@/lib/prisma";
 import {
@@ -102,6 +103,7 @@ export default async function Home() {
             Smart Wallet Radar
           </p>
           <div className="mt-1 flex justify-end gap-3">
+            <RefreshButton />
             <Link
               href="/history"
               className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/20 transition"

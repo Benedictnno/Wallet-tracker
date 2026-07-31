@@ -62,13 +62,14 @@ export class WalletDiscoveryService {
   /**
    * Main pipeline to discover new wallets.
    * 1. Fetches trending tokens.
-   * 2. Finds recent traders of those tokens via Helius.
-   * 3. Ingests and scores the top new wallets.
+   * 2. Finds traders of those tokens via Helius (up to 100 txs per token).
+   * 3. Filters traders by swap size (> 2 SOL or > $300).
+   * 4. Flags early buyers and calculates multi-token overlap.
+   * 5. Ranks candidates and ingests the top 3.
    */
-  async runDiscovery(tokenLimit = 3, limitWalletsPerToken = 3): Promise<{ discovered: number; processed: number }> {
+  async runDiscovery(tokenLimit = 3, limitWalletsPerToken = 100): Promise<{ discovered: number; processed: number }> {
     const tokens = await this.fetchTrendingTokens(tokenLimit);
-    const discoveredWallets = new Set<string>();
-
+    
     const apiKey = process.env.HELIUS_API_KEY;
     if (!apiKey) {
       console.error("[WalletDiscoveryService] HELIUS_API_KEY is not set.");
@@ -76,41 +77,109 @@ export class WalletDiscoveryService {
     }
     const heliusProvider = new HeliusWalletProvider(apiKey);
 
+    // Candidates across all trending tokens: address -> candidate info
+    // For overlap tracking and sorting
+    const candidatePool = new Map<string, {
+      address: string;
+      tradedTokens: Set<string>;
+      isEarlyBuyer: boolean;
+      maxSwapSol: number;
+      maxSwapUsd: number;
+    }>();
+
+    const MIN_SOL_THRESHOLD = 2.0;
+    const MIN_USD_THRESHOLD = 300.0;
+
     for (const tokenAddress of tokens) {
       try {
-        const txs = await heliusProvider.fetchWalletTransactions(tokenAddress, 30);
-        const traders = heliusProvider.extractTradersFromTransactions(txs);
+        // Fetch up to 100 transactions to catch a broader timeframe
+        const txs = await heliusProvider.fetchWalletTransactions(tokenAddress, 100);
+        if (txs.length === 0) continue;
+
+        // Sort chronologically ascending to identify early transactions in this batch
+        const sortedTxs = [...txs].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
         
-        // Take a small sample of active traders
-        traders
-          .filter(w => !EXCLUDED_MINTS.has(w) && w.length > 30)
-          .slice(0, limitWalletsPerToken)
-          .forEach(w => discoveredWallets.add(w));
+        // Define early threshold (first 20% of transactions chronologically)
+        const earlyCutoffIndex = Math.max(1, Math.floor(sortedTxs.length * 0.2));
+        const earlyTxs = new Set(sortedTxs.slice(0, earlyCutoffIndex).map(t => t.signature));
+
+        const tradersDetailed = heliusProvider.extractTradersFromTransactionsDetailed(txs, tokenAddress);
+
+        for (const t of tradersDetailed) {
+          // Exclude program/stablecoin mints and small strings
+          if (EXCLUDED_MINTS.has(t.address) || t.address.length < 30) continue;
+
+          // Trade Size Thresholding
+          if (t.swapValueSol < MIN_SOL_THRESHOLD && t.swapValueUsd < MIN_USD_THRESHOLD) {
+            continue; // Filter out small/retail trades
+          }
+
+          const isEarly = earlyTxs.has(t.txHash);
+          const existing = candidatePool.get(t.address);
+
+          if (existing) {
+            existing.tradedTokens.add(tokenAddress);
+            if (isEarly) existing.isEarlyBuyer = true;
+            existing.maxSwapSol = Math.max(existing.maxSwapSol, t.swapValueSol);
+            existing.maxSwapUsd = Math.max(existing.maxSwapUsd, t.swapValueUsd);
+          } else {
+            candidatePool.set(t.address, {
+              address: t.address,
+              tradedTokens: new Set([tokenAddress]),
+              isEarlyBuyer: isEarly,
+              maxSwapSol: t.swapValueSol,
+              maxSwapUsd: t.swapValueUsd,
+            });
+          }
+        }
       } catch (error) {
         console.error(`[WalletDiscoveryService] Failed to fetch traders for token ${tokenAddress}:`, error);
       }
     }
 
+    // Filter out candidates we are already tracking
+    const candidates = Array.from(candidatePool.values());
+    const validCandidates: typeof candidates = [];
+
+    for (const c of candidates) {
+      const existing = await prisma.wallet.findFirst({ where: { address: c.address, chain: "Solana" } });
+      if (!existing) {
+        validCandidates.push(c);
+      }
+    }
+
+    // Rank candidates:
+    // 1. Multi-token overlap (tradedTokens size desc)
+    // 2. Early buyer first
+    // 3. Max swap size (SOL desc, then USD desc)
+    validCandidates.sort((a, b) => {
+      if (b.tradedTokens.size !== a.tradedTokens.size) {
+        return b.tradedTokens.size - a.tradedTokens.size;
+      }
+      if (a.isEarlyBuyer !== b.isEarlyBuyer) {
+        return a.isEarlyBuyer ? -1 : 1;
+      }
+      if (b.maxSwapSol !== a.maxSwapSol) {
+        return b.maxSwapSol - a.maxSwapSol;
+      }
+      return b.maxSwapUsd - a.maxSwapUsd;
+    });
+
+    // Select top 3 candidates for ingestion
+    const targetCandidates = validCandidates.slice(0, 3);
     let newlyAdded = 0;
     const walletIdsToProcess: string[] = [];
 
-    // Limit to max 2 wallets per discovery run for ultra-fast response
-    const targetWallets = Array.from(discoveredWallets).slice(0, 2);
-
-    for (const address of targetWallets) {
-      let wallet = await prisma.wallet.findFirst({ where: { address, chain: "Solana" } });
-      
-      if (!wallet) {
-        wallet = await prisma.wallet.create({
-          data: {
-            address,
-            chain: "Solana",
-            label: `Discovered Wallet (${address.slice(0, 4)}...${address.slice(-4)})`,
-          },
-        });
-        newlyAdded++;
-      }
-      
+    for (const c of targetCandidates) {
+      console.log(`[WalletDiscoveryService] Ingesting high-value candidate: ${c.address} (Tokens: ${c.tradedTokens.size}, Early: ${c.isEarlyBuyer}, MaxSwap: ${c.maxSwapSol} SOL / $${c.maxSwapUsd})`);
+      const wallet = await prisma.wallet.create({
+        data: {
+          address: c.address,
+          chain: "Solana",
+          label: `Discovered Wallet (${c.address.slice(0, 4)}...${c.address.slice(-4)})`,
+        },
+      });
+      newlyAdded++;
       walletIdsToProcess.push(wallet.id);
     }
 
