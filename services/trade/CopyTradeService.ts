@@ -3,6 +3,7 @@ import { HeliusEnhancedTransaction } from "../solana/HeliusWalletProvider";
 import { jupiterTradeService } from "./JupiterTradeService";
 import { tokenPriceService } from "../TokenPriceService";
 import { notificationService } from "../NotificationService";
+import { globalRiskGuard } from "./GlobalRiskGuard";
 
 const NATIVE_SOL_MINT = "So11111111111111111111111111111111111111112";
 
@@ -84,6 +85,32 @@ export class CopyTradeService {
 
     if (!tokenMint) return;
 
+    // --- ORPHAN SELL GUARD (uses hard pairedSells relation) ---
+    // Do NOT copy a SELL unless we hold an open BUY position for this token
+    // that has not yet been paired with a closing SELL.
+    let openBuyRecord: { id: string; tokenId: string; amountSol: number } | null = null;
+    if (type === 'SELL') {
+      openBuyRecord = await prisma.executionRecord.findFirst({
+        where: {
+          walletId: settings.wallet.id,
+          type: 'BUY',
+          status: { in: ['SIMULATED', 'EXECUTED'] },
+          token: { address: tokenMint },
+          pairedSells: { none: {} }, // no closing SELL yet
+        },
+        orderBy: { timestamp: 'asc' }, // FIFO: close the oldest lot first
+        select: { id: true, tokenId: true, amountSol: true },
+      });
+
+      if (!openBuyRecord) {
+        console.log(
+          `[CopyTradeService] Skipping SELL for ${tokenMint} — no open BUY position found for wallet ${targetWalletAddress}. (Orphan sell ignored.)`
+        );
+        return;
+      }
+    }
+    // --- END ORPHAN SELL GUARD ---
+
     // Ensure the token exists in our DB (or create a stub)
     let token = await prisma.token.findUnique({
       where: { address_chain: { address: tokenMint, chain: 'Solana' } }
@@ -117,6 +144,17 @@ export class CopyTradeService {
       console.log(`[CopyTradeService] Already processed signature ${tx.signature}`);
       return;
     }
+
+    // --- GLOBAL RISK GUARD ---
+    const riskCheck = type === 'BUY'
+      ? await globalRiskGuard.checkBuyAllowed()
+      : await globalRiskGuard.checkSellAllowed();
+
+    if (!riskCheck.allowed) {
+      console.warn(`[CopyTradeService] Trade BLOCKED by risk guard: ${riskCheck.reason}`);
+      return;
+    }
+    // --- END GLOBAL RISK GUARD ---
 
     // --- Execution Sizing ---
     const tradeAmountSol = settings.defaultTradeSize;
@@ -184,7 +222,9 @@ export class CopyTradeService {
         amountToken: calculatedAmountToken,
         executionPrice: executionPriceSol,
         slippageTaken: slippageTaken,
-        errorReason: execError
+        errorReason: execError,
+        // Hard-link SELL records back to the BUY they close
+        ...(type === 'SELL' && openBuyRecord ? { pairedBuyId: openBuyRecord.id } : {}),
       }
     });
 

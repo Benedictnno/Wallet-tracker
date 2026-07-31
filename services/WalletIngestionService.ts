@@ -7,6 +7,7 @@ import {
 } from "@/services/TransactionParserService";
 import { tokenPriceService } from "@/services/TokenPriceService";
 import { spamTokenFilter } from "@/services/SpamTokenFilter";
+import { solPriceService } from "@/services/SolPriceService";
 
 type TradeLot = {
   amount: number;
@@ -296,7 +297,12 @@ export class WalletIngestionService {
           entryMarketCapEstimate: transaction.token.marketCap,
           entryLiquidityEstimate: transaction.token.liquidity,
           delayWindowSeconds: 30,
-          delayPriceChangePct: null,
+          // Heuristic/Approximation for delayPriceChangePct:
+          // If holdingTime <= 30 seconds, the delay sensitivity price change matches the entire trade ROI.
+          // Otherwise, estimate the price change in the first 30 seconds as a fraction of the total ROI.
+          delayPriceChangePct: holdingTime > 0
+            ? Math.max(-100, Math.min(1000, roi * (Math.min(30, holdingTime) / holdingTime)))
+            : 0,
           profitLoss,
           realizedPnL: profitLoss,
           unrealizedPnL: 0,
@@ -316,6 +322,9 @@ export class WalletIngestionService {
       openLotsByToken.set(transaction.tokenId, lots);
     }
 
+    // Fetch live SOL/USD price once for all unrealized PnL calculations
+    const currentSolPriceUsd = await solPriceService.getSOLPriceUsd();
+
     // Now handle remaining open lots
     for (const [tokenId, lots] of openLotsByToken.entries()) {
         const token = transactions.find(t => t.tokenId === tokenId)?.token;
@@ -324,11 +333,9 @@ export class WalletIngestionService {
         for (const lot of lots) {
             let unrealizedPnL: number | undefined;
             if (token.priceUsd) {
-                // VERY basic unrealized PnL assuming priceUsd is roughly comparable.
-                // In reality we should compare it to the USD entry price.
-                // We'll leave this simple for now since it wasn't specified exactly how to mix SOL/USD.
-                const currentSolPrice = 150; // hardcoded placeholder since we don't have SOL price readily available here
-                const lotEntryUsd = lot.price * currentSolPrice * lot.amount;
+                // Unrealized PnL: compare current USD value of tokens against
+                // the USD cost basis (entry price in SOL × live SOL price).
+                const lotEntryUsd = lot.price * currentSolPriceUsd * lot.amount;
                 const currentUsdValue = token.priceUsd * lot.amount;
                 unrealizedPnL = currentUsdValue - lotEntryUsd;
             }

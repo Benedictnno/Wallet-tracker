@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import { tokenPriceService } from "../TokenPriceService";
 import { jupiterTradeService } from "./JupiterTradeService";
+import { globalRiskGuard } from "./GlobalRiskGuard";
 
 const NATIVE_SOL_MINT = "So11111111111111111111111111111111111111112";
 
@@ -73,9 +74,15 @@ export class PositionMonitorService {
           const pnlPct = ((currentPrice - entryPrice) / entryPrice) * 100;
 
           // Check TP and SL conditions
-          // takeProfitPct is stored as multiplier or percentage (e.g., 2.0 = +200%, or 200)
-          const targetTakeProfit = setting.takeProfitPct >= 10 ? setting.takeProfitPct : setting.takeProfitPct * 100;
-          const targetStopLoss = setting.stopLossPct >= 1 ? setting.stopLossPct : setting.stopLossPct * 100;
+          // takeProfitPct and stopLossPct are always stored as a percentage
+          // (e.g. 200 = 200% gain = 2x, 50 = 50% loss).
+          // Older records may have used a multiplier (2.0 = 2x); normalise here.
+          const targetTakeProfit = setting.takeProfitPct < 10
+            ? setting.takeProfitPct * 100   // legacy multiplier → convert to %
+            : setting.takeProfitPct;        // already a percentage
+          const targetStopLoss = setting.stopLossPct < 1
+            ? setting.stopLossPct * 100     // legacy multiplier → convert to %
+            : setting.stopLossPct;          // already a percentage
 
           let actionTaken: "TAKE_PROFIT" | "STOP_LOSS" | "NONE" = "NONE";
 
@@ -88,6 +95,23 @@ export class PositionMonitorService {
           let sellRecordId: string | undefined;
 
           if (actionTaken !== "NONE") {
+            // --- GLOBAL RISK GUARD for auto-exit ---
+            const riskCheck = await globalRiskGuard.checkSellAllowed();
+            if (!riskCheck.allowed) {
+              console.warn(`[PositionMonitorService] Auto-exit BLOCKED by risk guard: ${riskCheck.reason}`);
+              results.push({
+                walletId: setting.walletId,
+                tokenId: buyRecord.tokenId,
+                tokenSymbol: buyRecord.token.symbol,
+                buyRecordId: buyRecord.id,
+                entryPriceUsd: entryPrice,
+                currentPriceUsd: currentPrice,
+                pnlPct,
+                actionTaken: "NONE",
+              });
+              continue;
+            }
+
             const amountTokenToSell = buyRecord.amountToken || 0;
             let execStatus = "SIMULATED";
             let execError = null;
@@ -152,6 +176,7 @@ export class PositionMonitorService {
                 executionPrice: executionPriceSol,
                 slippageTaken: slippageTaken,
                 errorReason: execError,
+                pairedBuyId: buyRecord.id, // hard-link to the BUY this auto-exit closes
               },
             });
             sellRecordId = sellRecord.id;

@@ -1,27 +1,43 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
-export default async function HistoryPage() {
-  const records = await prisma.executionRecord.findMany({
-    include: {
-      token: true,
-      wallet: true,
-    },
-    orderBy: {
-      timestamp: "desc",
-    },
-    take: 100, // Limit to recent 100 for performance
-  });
+const PAGE_SIZE = 50;
+
+interface PageProps {
+  searchParams: Promise<{ page?: string }>;
+}
+
+export default async function HistoryPage({ searchParams }: PageProps) {
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
+  const skip = (page - 1) * PAGE_SIZE;
+
+  const [records, totalCount] = await Promise.all([
+    prisma.executionRecord.findMany({
+      include: { token: true, wallet: true },
+      orderBy: { timestamp: "desc" },
+      skip,
+      take: PAGE_SIZE,
+    }),
+    prisma.executionRecord.count(),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const hasPrev = page > 1;
+  const hasNext = page < totalPages;
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-full flex flex-col">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Bot Activity & Trade History</h1>
-          <p className="text-slate-400">View recent copy-trades, paper trades, and execution statuses.</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Bot Activity &amp; Trade History</h1>
+          <p className="text-slate-400">
+            View recent copy-trades, paper trades, and execution statuses.
+            <span className="ml-2 text-slate-500 text-sm">({totalCount} total records)</span>
+          </p>
         </div>
         <Link
           href="/"
@@ -68,14 +84,16 @@ export default async function HistoryPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="font-medium text-slate-300">{record.wallet.label || 'Unknown'}</span>
+                      <span className="font-medium text-slate-300">{record.wallet.label || "Unknown"}</span>
                       <div className="text-xs text-slate-500 font-mono">
                         {record.wallet.address.slice(0, 4)}...{record.wallet.address.slice(-4)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        record.type === "BUY" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                        record.type === "BUY"
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
                       }`}>
                         {record.type}
                       </span>
@@ -90,17 +108,19 @@ export default async function HistoryPage() {
                       {record.amountSol.toFixed(4)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-slate-400">
-                      {record.amountToken ? record.amountToken.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '-'}
+                      {record.amountToken
+                        ? record.amountToken.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                        : "-"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-slate-400">
-                      {record.executionPrice ? `$${record.executionPrice.toFixed(6)}` : '-'}
+                      {record.executionPrice ? `$${record.executionPrice.toFixed(6)}` : "-"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        record.status === 'EXECUTED' ? 'bg-emerald-500/10 text-emerald-400' :
-                        record.status === 'FAILED' ? 'bg-rose-500/10 text-rose-400' :
-                        record.status === 'SIMULATED' ? 'bg-indigo-500/10 text-indigo-400' :
-                        'bg-slate-500/10 text-slate-400'
+                        record.status === "EXECUTED"  ? "bg-emerald-500/10 text-emerald-400" :
+                        record.status === "FAILED"    ? "bg-rose-500/10 text-rose-400" :
+                        record.status === "SIMULATED" ? "bg-indigo-500/10 text-indigo-400" :
+                                                        "bg-slate-500/10 text-slate-400"
                       }`}>
                         {record.status}
                       </span>
@@ -111,7 +131,7 @@ export default async function HistoryPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {record.targetTradeId && record.status === 'EXECUTED' && (
+                      {record.targetTradeId && record.status === "EXECUTED" && (
                         <a
                           href={`https://solscan.io/tx/${record.targetTradeId}`}
                           target="_blank"
@@ -134,6 +154,30 @@ export default async function HistoryPage() {
           </div>
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between text-sm text-slate-400">
+          <span>
+            Page {page} of {totalPages} &middot; {totalCount} records
+          </span>
+          <div className="flex gap-2">
+            {hasPrev ? (
+              <Link href={`/history?page=${page - 1}`} className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors">
+                &larr; Prev
+              </Link>
+            ) : (
+              <span className="px-3 py-1.5 rounded-lg bg-slate-800/40 text-slate-600 border border-slate-700/50 cursor-not-allowed">&larr; Prev</span>
+            )}
+            {hasNext ? (
+              <Link href={`/history?page=${page + 1}`} className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors">
+                Next &rarr;
+              </Link>
+            ) : (
+              <span className="px-3 py-1.5 rounded-lg bg-slate-800/40 text-slate-600 border border-slate-700/50 cursor-not-allowed">Next &rarr;</span>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

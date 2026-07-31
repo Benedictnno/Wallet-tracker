@@ -16,29 +16,29 @@ model User {
 }
 
 model Wallet {
-  id               String        @id @default(uuid())
-  address          String
-  chain            String
-  label            String?
-  riskScore        Float?
-  smartScore       Float?
-  isSuspectedBot   Boolean       @default(false)
-  botType          String?
-  botConfidence    Float?
-  integrityFlags   String?
-  integrityPenalty Float         @default(0)
-  createdAt        DateTime      @default(now())
-  transactions     Transaction[]
-  trades           Trade[]
-  score            WalletScore?
+  id                String             @id @default(uuid())
+  address           String
+  chain             String
+  label             String?
+  riskScore         Float?
+  smartScore        Float?
+  isSuspectedBot    Boolean            @default(false)
+  botType           String?
+  botConfidence     Float?
+  integrityFlags    String?
+  integrityPenalty  Float              @default(0)
+  createdAt         DateTime           @default(now())
   copyTradeSettings CopyTradeSettings?
-  executionRecords ExecutionRecord[]
+  executionRecords  ExecutionRecord[]
+  trades            Trade[]
+  transactions      Transaction[]
+  score             WalletScore?
 
   @@unique([address, chain])
 }
 
 model Token {
-  id                String        @id @default(uuid())
+  id                String            @id @default(uuid())
   address           String
   symbol            String
   name              String
@@ -46,151 +46,150 @@ model Token {
   liquidity         Float?
   priceUsd          Float?
   fdv               Float?
-  isSpam            Boolean       @default(false)
+  isSpam            Boolean           @default(false)
   spamReason        String?
   launchDate        DateTime?
   firstSeenAt       DateTime?
   lastSeenAt        DateTime?
   metadataUpdatedAt DateTime?
   chain             String
-  transactions      Transaction[]
-  trades            Trade[]
   executionRecords  ExecutionRecord[]
+  trades            Trade[]
+  transactions      Transaction[]
 
   @@unique([address, chain])
 }
 
 model Transaction {
-  id                String   @id @default(uuid())
-  externalId        String?  @unique
-  signature         String?
-  walletId          String
-  tokenId           String
-  type              String // "BUY" or "SELL"
-  transactionType   String?
-  source            String?
-  description       String?
-  amount            Float
-  price             Float
+  id                  String   @id @default(uuid())
+  externalId          String?  @unique
+  signature           String?
+  walletId            String
+  tokenId             String
+  type                String
+  transactionType     String?
+  source              String?
+  description         String?
+  amount              Float
+  price               Float
   counterAssetAddress String?
   counterAssetSymbol  String?
-  counterAmount     Float?
-  timestamp         DateTime
-  wallet            Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  token             Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
-}
-
-model Trade {
-  id                    String   @id @default(uuid())
-  walletId              String
-  tokenId               String
-  status                String   @default("CLOSED") // OPEN, PARTIAL, CLOSED
-  entryPrice            Float
-  exitPrice             Float?
-  entryTime             DateTime
-  exitTime              DateTime?
-  entrySignature        String?
-  exitSignature         String?
-  entrySource           String?
-  exitSource            String?
-  tokenFirstSeenAt      DateTime?
-  tokenAgeSecondsAtEntry Int?
-  entryCounterAssetAddress String?
-  entryCounterAssetSymbol  String?
-  entryCounterAmount    Float?
-  exitCounterAssetAddress String?
-  exitCounterAssetSymbol  String?
-  exitCounterAmount     Float?
-  entryMarketCapEstimate Float?
-  entryLiquidityEstimate Float?
-  delayWindowSeconds    Int?
-  delayPriceChangePct   Float?
-  profitLoss            Float?
-  roi                   Float?
-  realizedPnL           Float?
-  unrealizedPnL         Float?
-  remainingAmount       Float?
-  holdingTime           Int? // in seconds
-  wallet                Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  token                 Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
-}
-
-model WalletScore {
-  id                  String   @id @default(uuid())
-  walletId            String   @unique
-  profitabilityScore  Float
-  consistencyScore    Float
-  entryTimingScore    Float
-  riskScore           Float
-  tradeQualityScore   Float
-  copyabilityScore    Float
-  totalScore          Float
-  classification      String
-  totalTrades         Int      @default(0)
-  winningTrades       Int      @default(0)
-  losingTrades        Int      @default(0)
-  winRate             Float    @default(0)
-  totalROI            Float    @default(0)
-  averageTradeROI     Float    @default(0)
-  profitFactor        Float    @default(0)
-  tradeCountConfidence Float   @default(0)
-  monthlyConsistency  Float    @default(0)
-  earlyEntryPercentage Float   @default(0)
-  firstBuyerPercentage Float   @default(0)
-  averageHoldingTimeHours Float @default(0)
-  averageTradesPerDay Float    @default(0)
-  maxDrawdown         Float    @default(0)
-  largestPositionPercentage Float @default(0)
-  averageLossPercentage Float  @default(0)
-  riskAdjustedReturn  Float    @default(0)
-  exitQualityScore    Float    @default(0)
-  delaySensitivityScore Float  @default(0)
-  liquidityScore      Float    @default(0)
-  updatedAt           DateTime @updatedAt
+  counterAmount       Float?
+  timestamp           DateTime
+  token               Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
   wallet              Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
 }
 
+model Trade {
+  id                       String    @id @default(uuid())
+  walletId                 String
+  tokenId                  String
+  status                   String    @default("CLOSED")
+  entryPrice               Float
+  exitPrice                Float?
+  entryTime                DateTime
+  exitTime                 DateTime?
+  entrySignature           String?
+  exitSignature            String?
+  entrySource              String?
+  exitSource               String?
+  tokenFirstSeenAt         DateTime?
+  tokenAgeSecondsAtEntry   Int?
+  entryCounterAssetAddress String?
+  entryCounterAssetSymbol  String?
+  entryCounterAmount       Float?
+  exitCounterAssetAddress  String?
+  exitCounterAssetSymbol   String?
+  exitCounterAmount        Float?
+  entryMarketCapEstimate   Float?
+  entryLiquidityEstimate   Float?
+  delayWindowSeconds       Int?
+  delayPriceChangePct      Float?
+  profitLoss               Float?
+  roi                      Float?
+  realizedPnL              Float?
+  unrealizedPnL            Float?
+  remainingAmount          Float?
+  holdingTime              Int?
+  token                    Token     @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  wallet                   Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model WalletScore {
+  id                        String   @id @default(uuid())
+  walletId                  String   @unique
+  profitabilityScore        Float
+  consistencyScore          Float
+  entryTimingScore          Float
+  riskScore                 Float
+  tradeQualityScore         Float
+  copyabilityScore          Float
+  totalScore                Float
+  classification            String
+  totalTrades               Int      @default(0)
+  winningTrades             Int      @default(0)
+  losingTrades              Int      @default(0)
+  winRate                   Float    @default(0)
+  totalROI                  Float    @default(0)
+  averageTradeROI           Float    @default(0)
+  profitFactor              Float    @default(0)
+  tradeCountConfidence      Float    @default(0)
+  monthlyConsistency        Float    @default(0)
+  earlyEntryPercentage      Float    @default(0)
+  firstBuyerPercentage      Float    @default(0)
+  averageHoldingTimeHours   Float    @default(0)
+  averageTradesPerDay       Float    @default(0)
+  maxDrawdown               Float    @default(0)
+  largestPositionPercentage Float    @default(0)
+  averageLossPercentage     Float    @default(0)
+  riskAdjustedReturn        Float    @default(0)
+  exitQualityScore          Float    @default(0)
+  delaySensitivityScore     Float    @default(0)
+  liquidityScore            Float    @default(0)
+  updatedAt                 DateTime @updatedAt
+  wallet                    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
 model CopyTradeSettings {
-  id                String   @id @default(uuid())
-  walletId          String   @unique
-  enabled           Boolean  @default(false)
-  maxDailyLoss      Float    @default(0.5) // Max 0.5 SOL loss per day before pausing
-  defaultTradeSize  Float    @default(0.1) // Default 0.1 SOL per trade
-  slippageBps       Int      @default(300) // 3% slippage
-  takeProfitPct     Float    @default(2.0) // Sell at 2x
-  stopLossPct       Float    @default(0.5) // Sell at -50%
-  updatedAt         DateTime @updatedAt
-  wallet            Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  id               String   @id @default(uuid())
+  walletId         String   @unique
+  enabled          Boolean  @default(false)
+  maxDailyLoss     Float    @default(0.5)
+  defaultTradeSize Float    @default(0.1)
+  slippageBps      Int      @default(300)
+  takeProfitPct    Float    @default(2.0)
+  stopLossPct      Float    @default(0.5)
+  updatedAt        DateTime @updatedAt
+  wallet           Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
 }
 
 model ExecutionRecord {
-  id                String   @id @default(uuid())
-  walletId          String
-  targetTradeId     String?  // If tied to a specific Trade ID from the target wallet
-  tokenId           String
-  status            String   // PENDING, EXECUTED, FAILED, SIMULATED
-  type              String   // BUY, SELL
-  amountSol         Float
-  amountToken       Float?
-  executionPrice    Float?
-  slippageTaken     Float?
-  errorReason       String?
-  timestamp         DateTime @default(now())
-  wallet            Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  token             Token    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  id             String            @id @default(uuid())
+  walletId       String
+  targetTradeId  String?
+  tokenId        String
+  status         String
+  type           String
+  amountSol      Float
+  amountToken    Float?
+  executionPrice Float?
+  slippageTaken  Float?
+  errorReason    String?
+  timestamp      DateTime          @default(now())
+  pairedBuyId    String?
+  pairedBuy      ExecutionRecord?  @relation("BuySellPair", fields: [pairedBuyId], references: [id])
+  pairedSells    ExecutionRecord[] @relation("BuySellPair")
+  token          Token             @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  wallet         Wallet            @relation(fields: [walletId], references: [id], onDelete: Cascade)
 }
 
-// Global singleton settings stored in DB (avoids secrets in env for production)
 model GlobalSettings {
-  id                    String   @id @default("singleton")
-  // Notifications
-  telegramBotToken      String?
-  telegramChatId        String?
-  discordWebhookUrl     String?
-  // Live vs Paper trading master switch
-  liveTradeEnabled      Boolean  @default(false)
-  // Global risk limits
-  globalMaxOpenPositions Int     @default(5)
-  globalDailyLossSol    Float    @default(2.0)
-  updatedAt             DateTime @updatedAt
+  id                     String   @id @default("singleton")
+  telegramBotToken       String?
+  telegramChatId         String?
+  discordWebhookUrl      String?
+  liveTradeEnabled       Boolean  @default(false)
+  globalMaxOpenPositions Int      @default(5)
+  globalDailyLossSol     Float    @default(2.0)
+  updatedAt              DateTime @updatedAt
 }

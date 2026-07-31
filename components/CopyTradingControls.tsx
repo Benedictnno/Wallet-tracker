@@ -130,17 +130,17 @@ export default function CopyTradingControls({ walletId, initialSettings }: { wal
 
         <div className="rounded-2xl bg-slate-900/70 p-4 ring-1 ring-white/5">
           <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-            Take Profit Target (Multiple)
+            Take Profit Target (%)
           </label>
           <input 
             type="number" 
-            step="0.1"
-            min="1.1"
+            step="10"
+            min="10"
             value={takeProfitPct}
             onChange={e => setTakeProfitPct(parseFloat(e.target.value))}
             className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2 text-sm text-white focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
-          <p className="text-[11px] text-slate-400 mt-1">2.0 = Auto-sell at 2x profit</p>
+          <p className="text-[11px] text-slate-400 mt-1">e.g. 200 = Auto-sell at +200% (3x entry)</p>
         </div>
 
         <div className="rounded-2xl bg-slate-900/70 p-4 ring-1 ring-white/5">
@@ -149,14 +149,14 @@ export default function CopyTradingControls({ walletId, initialSettings }: { wal
           </label>
           <input 
             type="number" 
-            step="0.05"
-            min="0.1"
-            max="0.9"
+            step="5"
+            min="1"
+            max="99"
             value={stopLossPct}
             onChange={e => setStopLossPct(parseFloat(e.target.value))}
             className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2 text-sm text-white focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
-          <p className="text-[11px] text-slate-400 mt-1">0.5 = Auto-sell at -50% loss</p>
+          <p className="text-[11px] text-slate-400 mt-1">e.g. 50 = Auto-sell at -50% loss</p>
         </div>
 
         <div className="rounded-2xl bg-slate-900/70 p-4 ring-1 ring-white/5">
