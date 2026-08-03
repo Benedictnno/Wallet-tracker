@@ -67,7 +67,7 @@ export class WalletDiscoveryService {
    * 4. Flags early buyers and calculates multi-token overlap.
    * 5. Ranks candidates and ingests the top 3.
    */
-  async runDiscovery(tokenLimit = 3, limitWalletsPerToken = 100): Promise<{ discovered: number; processed: number }> {
+  async runDiscovery(tokenLimit = 3, limitWalletsPerToken = 250): Promise<{ discovered: number; processed: number }> {
     const tokens = await this.fetchTrendingTokens(tokenLimit);
     
     const apiKey = process.env.HELIUS_API_KEY;
@@ -87,13 +87,12 @@ export class WalletDiscoveryService {
       maxSwapUsd: number;
     }>();
 
-    const MIN_SOL_THRESHOLD = 2.0;
-    const MIN_USD_THRESHOLD = 300.0;
+    const MIN_SOL_THRESHOLD = 1.0;
+    const MIN_USD_THRESHOLD = 150.0;
 
     for (const tokenAddress of tokens) {
       try {
-        // Fetch up to 100 transactions to catch a broader timeframe
-        const txs = await heliusProvider.fetchWalletTransactions(tokenAddress, 100);
+        const txs = await heliusProvider.fetchWalletTransactions(tokenAddress, Math.min(limitWalletsPerToken, 100));
         if (txs.length === 0) continue;
 
         // Sort chronologically ascending to identify early transactions in this batch

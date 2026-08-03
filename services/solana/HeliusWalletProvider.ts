@@ -133,12 +133,15 @@ export class HeliusWalletProvider {
       }
     }
 
-    if (usd === 0 && tx.tokenTransfers) {
+    if (tx.tokenTransfers) {
+      const WSOL = "So11111111111111111111111111111111111111112";
       const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
       const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
       for (const tt of tx.tokenTransfers) {
         if ((tt.fromUserAccount === tx.feePayer || tt.toUserAccount === tx.feePayer) && tt.tokenAmount) {
-          if (tt.mint === USDC || tt.mint === USDT) {
+          if (tt.mint === WSOL) {
+            sol = Math.max(sol, tt.tokenAmount);
+          } else if (tt.mint === USDC || tt.mint === USDT) {
             usd = Math.max(usd, tt.tokenAmount);
           }
         }

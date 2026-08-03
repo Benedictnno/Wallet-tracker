@@ -1,0 +1,4 @@
+- `[x]` Modify discovery thresholds and transaction fetch limit in `services/WalletDiscoveryService.ts`
+- `[x]` Double check `services/trade/CopyTradeService.ts` to ensure it only copies SOL pairs
+- `[x]` Run manual discovery script to add new, actively trading wallets
+- `[x]` Run test suite to verify code integrity
