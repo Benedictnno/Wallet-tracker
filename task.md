@@ -2,3 +2,5 @@
 - `[x]` Double check `services/trade/CopyTradeService.ts` to ensure it only copies SOL pairs
 - `[x]` Run manual discovery script to add new, actively trading wallets
 - `[x]` Run test suite to verify code integrity
+- `[x]` Fix static page caching by adding `force-dynamic` to `app/page.tsx`
+- `[x]` Force sync and scoring for the newly added wallets

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
+
+export const dynamic = "force-dynamic";
 import WalletForm from "@/components/WalletForm";
 import RunDiscoveryButton from "@/components/RunDiscoveryButton";
 import RefreshButton from "@/components/RefreshButton";
